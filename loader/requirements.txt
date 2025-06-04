@@ -1,0 +1,6 @@
+qdrant-client
+PyPDF2
+python-docx
+markdown
+requests
+psycopg2-binary

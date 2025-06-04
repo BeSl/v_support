@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+qdrant-client
+httpx
+python-dotenv
+psycopg2-binary
