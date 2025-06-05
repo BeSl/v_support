@@ -71,38 +71,42 @@ def create_tables():
 def create_session(user_agent: str, ip_address: str) -> uuid.UUID:
     session_id = uuid.uuid4()
     with get_db_cursor() as cursor:
+        session_id_str = str(session_id)
         cursor.execute(
             "INSERT INTO sessions (session_id, user_agent, ip_address) VALUES (%s, %s, %s)",
-            (session_id, user_agent, ip_address)
+            (session_id_str, user_agent, ip_address)
         )
     return session_id
 
-def save_message(session_id: uuid.UUID, role: str, content: str, context: str = None, sources: str = None):
+def save_message(session_id: uuid.UUID, role: str, content: str, context: str = None, sources: str = None): # type: ignore
     with get_db_cursor() as cursor:
+        session_id_str = str(session_id)
         cursor.execute(
             "INSERT INTO messages (session_id, role, content, context, sources) VALUES (%s, %s, %s, %s, %s)",
-            (session_id, role, content, context, sources)
+            (session_id_str, role, content, context, sources)
         )
         
         # Обновляем время последней активности сессии
         cursor.execute(
             "UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE session_id = %s",
-            (session_id,)
+            (session_id_str,)
         )
 
 def get_session_history(session_id: uuid.UUID, limit: int = 10) -> list:
     with get_db_cursor() as cursor:
+        session_id_str = str(session_id)
         cursor.execute(
             "SELECT role, content, timestamp FROM messages WHERE session_id = %s ORDER BY timestamp DESC LIMIT %s",
-            (session_id, limit)
+            (session_id_str, limit)
         )
         return cursor.fetchall()
 
 def get_full_context(session_id: uuid.UUID) -> str:
     with get_db_cursor() as cursor:
+        session_id_str = str(session_id)
         cursor.execute(
             "SELECT role, content FROM messages WHERE session_id = %s ORDER BY timestamp",
-            (session_id,)
+            (session_id_str,)
         )
         history = cursor.fetchall()
         
@@ -115,17 +119,21 @@ def get_full_context(session_id: uuid.UUID) -> str:
 def create_async_task(session_id: uuid.UUID, username: str, user_id: str, question: str) -> uuid.UUID:
     task_id = uuid.uuid4()
     with get_db_cursor() as cursor:
+        session_id_str = str(session_id)
+        task_id_str = str(task_id)
+
         cursor.execute(
             """
             INSERT INTO async_tasks (task_id, session_id, username, user_id, question, status)
             VALUES (%s, %s, %s, %s, %s, 'pending')
             """,
-            (task_id, session_id, username, user_id, question)
+            (task_id_str, session_id_str, username, user_id, question)
         )
     return task_id
 
-def get_async_task(task_id: uuid.UUID) -> dict:
+def get_async_task(task_id: uuid.UUID) -> dict|None:
     with get_db_cursor() as cursor:
+        task_id_str = str(task_id)
         cursor.execute(
             """
             SELECT task_id, session_id, created_at, started_at, completed_at, status, 
@@ -133,7 +141,7 @@ def get_async_task(task_id: uuid.UUID) -> dict:
             FROM async_tasks
             WHERE task_id = %s
             """,
-            (task_id,)
+            (task_id_str,)
         )
         task = cursor.fetchone()
         if not task:
@@ -153,27 +161,37 @@ def get_async_task(task_id: uuid.UUID) -> dict:
             "error": task[10]
         }
 
-def update_task_status(task_id: uuid.UUID, status: str, answer: str = None, error: str = None):
-    update_fields = []
-    params = []
+def update_task_status(task_id: uuid.UUID, status: str, answer: str|None, error: str|None):
+    update_fields = ["status = %s"]
+    params = [status]
     
-    update_fields.append("status = %s")
-    params.append(status)
+    # Для обработки временных меток
+    timestamp_updates = {
+        'processing': 'started_at',
+        'completed': 'completed_at',
+        'failed': 'completed_at'
+    }
     
-    if status == 'processing':
-        update_fields.append("started_at = CURRENT_TIMESTAMP")
-    elif status == 'completed':
-        update_fields.append("completed_at = CURRENT_TIMESTAMP")
-        update_fields.append("answer = %s")
-        params.append(answer)
-    elif status == 'failed':
-        update_fields.append("completed_at = CURRENT_TIMESTAMP")
-        update_fields.append("error = %s")
-        params.append(error)
+    # Добавляем временные метки
+    if status in timestamp_updates:
+        update_fields.append(f"{timestamp_updates[status]} = CURRENT_TIMESTAMP")
     
+    # Добавляем дополнительные поля в зависимости от статуса
+    field_mapping = {
+        'completed': ('answer', answer),
+        'failed': ('error', error)
+    }
+    
+    if status in field_mapping:
+        field_name, field_value = field_mapping[status]
+        if field_value is not None:
+            update_fields.append(f"{field_name} = %s")
+            params.append(field_value)
+    
+    # Формируем и выполняем запрос
     with get_db_cursor() as cursor:
         query = sql.SQL("UPDATE async_tasks SET {} WHERE task_id = %s").format(
             sql.SQL(', ').join(map(sql.SQL, update_fields))
         )
-        params.append(task_id)
+        params.append(str(task_id))
         cursor.execute(query, params)

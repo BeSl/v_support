@@ -28,7 +28,7 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "raguser")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "ragpassword")
 
 # Конфигурация Ollama
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 def setup_logging():

@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 import logging
-from .db import update_task_status
+from .db import get_async_task, get_db_cursor, update_task_status
 from .rag import RAGProcessor
 
 logger = logging.getLogger("AsyncTasks")
@@ -9,7 +9,7 @@ rag = RAGProcessor()
 
 async def process_async_task(task_id: uuid.UUID):
     # Обновляем статус задачи на "в обработке"
-    update_task_status(task_id, 'processing')
+    update_task_status(task_id, 'processing', None, None)
     
     try:
         # Получаем данные задачи
@@ -28,7 +28,8 @@ async def process_async_task(task_id: uuid.UUID):
         update_task_status(
             task_id, 
             'completed', 
-            answer=result['response']
+            answer=result['response'],
+            error  =None
         )
         
         logger.info(f"Task completed: {task_id}")
@@ -38,6 +39,7 @@ async def process_async_task(task_id: uuid.UUID):
         update_task_status(
             task_id, 
             'failed', 
+            answer= None,
             error=str(e)
         )
 

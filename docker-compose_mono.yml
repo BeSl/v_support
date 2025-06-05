@@ -6,10 +6,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - QDRANT_URL=http://192.168.2.9:6333
-      - OLLAMA_URL=http://192.168.2.9:11434/api/generate
-      - OLLAMA_HOST=http://192.168.2.9:11434
-      - OLLAMA_MODEL=qwen2.5-coder:0.5b
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://localhost:11434/api/generate
+      - OLLAMA_MODEL=qwen2.5-coder:latest
       - EMBEDDING_MODEL=nomic-embed-text
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=ragdb
@@ -19,6 +18,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
 
   loader:
     build: ./loader
@@ -27,8 +30,7 @@ services:
       - ./volumes/processed:/app/processed
       - ./volumes/logs:/app/logs
     environment:
-      - QDRANT_URL=http://192.168.2.9:6333
-      - OLLAMA_HOST=http://192.168.2.9:11434
+      - QDRANT_URL=http://qdrant:6333
       - COLLECTION_NAME=documents
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=ragdb
@@ -38,10 +40,34 @@ services:
       postgres:
         condition: service_healthy
 
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    command: >
+      sh -c "
+        ollama pull nomic-embed-text &&
+        ollama pull llama3 &&
+        /bin/ollama serve
+      "
+
   postgres:
     image: postgres:15
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_DB: ragdb
       POSTGRES_USER: raguser
@@ -56,6 +82,8 @@ services:
       retries: 5
 
 volumes:
+  qdrant_data:
+  ollama_data:
   postgres_data:
   source:
   processed:

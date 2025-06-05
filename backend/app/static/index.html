@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>RAG Assistant</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <style>
         :root {
             --primary: #4361ee;
@@ -147,7 +148,7 @@
 
     <script>
         let currentSessionId = null;
-    
+
         // Проверка сессии при загрузке
         document.addEventListener('DOMContentLoaded', function() {
             const savedSession = localStorage.getItem('sessionId');
@@ -158,39 +159,47 @@
                 createNewSession();
             }
         });
-    
+
         async function createNewSession() {
-            const response = await fetch('/api/session', { method: 'POST' });
-            const data = await response.json();
-            currentSessionId = data.session_id;
-            localStorage.setItem('sessionId', currentSessionId);
-            
-            // Приветственное сообщение
-            const chat = document.getElementById('chat');
-            const welcomeMsg = document.createElement('div');
-            welcomeMsg.className = 'message bot-message';
-            welcomeMsg.textContent = 'Здравствуйте! Я ваш ассистент с технологией RAG. Задайте вопрос о содержимом ваших документов.';
-            chat.appendChild(welcomeMsg);
+            try {
+                const response = await fetch('/api/session', { method: 'POST' });
+                const data = await response.json();
+                currentSessionId = data.session_id;
+                localStorage.setItem('sessionId', currentSessionId);
+                
+                // Приветственное сообщение
+                const chat = document.getElementById('chat');
+                const welcomeMsg = document.createElement('div');
+                welcomeMsg.className = 'message bot-message';
+                welcomeMsg.textContent = 'Здравствуйте! Я ваш ассистент с технологией RAG. Задайте вопрос о содержимом ваших документов.';
+                chat.appendChild(welcomeMsg);
+            } catch (error) {
+                console.error('Error creating session:', error);
+            }
         }
-    
+
         async function loadHistory() {
-            const response = await fetch(`/api/history/${currentSessionId}`);
-            const history = await response.json();
-            
-            const chat = document.getElementById('chat');
-            chat.innerHTML = '';
-            
-            history.forEach(msg => {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `message ${msg.role === 'user' ? 'user-message' : 'bot-message'}`;
-                msgDiv.innerHTML = msg.content.replace(/\n/g, '<br>');
-                chat.appendChild(msgDiv);
-            });
-            
-            // Прокрутка вниз
-            chat.scrollTop = chat.scrollHeight;
+            try {
+                const response = await fetch(`/api/history/${currentSessionId}`);
+                const history = await response.json();
+                
+                const chat = document.getElementById('chat');
+                chat.innerHTML = '';
+                
+                history.forEach(msg => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = `message ${msg.role === 'user' ? 'user-message' : 'bot-message'}`;
+                    msgDiv.innerHTML = msg.content.replace(/\n/g, '<br>');
+                    chat.appendChild(msgDiv);
+                });
+                
+                // Прокрутка вниз
+                chat.scrollTop = chat.scrollHeight;
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
         }
-    
+
         async function sendQuery() {
             const input = document.getElementById('queryInput');
             const query = input.value.trim();
@@ -214,8 +223,8 @@
             // Прокрутка вниз
             chat.scrollTop = chat.scrollHeight;
             
-            // Отправляем запрос на сервер
             try {
+                // Отправляем запрос на сервер
                 const response = await fetch(`/api/query?q=${encodeURIComponent(query)}&session_id=${currentSessionId}`);
                 const data = await response.json();
                 
@@ -235,13 +244,41 @@
             // Прокрутка вниз
             chat.scrollTop = chat.scrollHeight;
         }
-    
+
         // Обработка Enter
         document.getElementById('queryInput').addEventListener('keyup', function(event) {
             if (event.key === 'Enter') {
                 sendQuery();
             }
         });
+
+        // Функция для асинхронных запросов (если используется)
+        async function sendAsyncQuery(username, userId, question) {
+            try {
+                const response = await axios.post('/api/async-query', {
+                    username: username,
+                    user_id: userId,
+                    question: question,
+                    session_id: currentSessionId
+                });
+                
+                return response.data;
+            } catch (error) {
+                console.error('Async query error:', error);
+                return null;
+            }
+        }
+
+        // Функция для проверки статуса асинхронной задачи
+        async function checkAsyncTaskStatus(taskId) {
+            try {
+                const response = await fetch(`/api/async-result/${taskId}`);
+                return await response.json();
+            } catch (error) {
+                console.error('Task status error:', error);
+                return null;
+            }
+        }
     </script>
 </body>
 </html>
